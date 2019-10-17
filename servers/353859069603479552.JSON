@@ -1,0 +1,60 @@
+{
+  "guild": {
+    "permittedChannels": [
+      "532463349301116938",
+      "508948033946517504"
+    ],
+    "captainRole": "353859069603479552",
+    "scrimInProgress": true,
+    "gameidEmbed": "541412887235657736",
+    "gameidChannel": "541405977405161483",
+    "gameidType": "solo",
+    "currentScrim": [
+      {
+        "games": [
+          {
+            "gameID": "test",
+            "teams": [
+              "139279634796773376"
+            ]
+          }
+        ]
+      }
+    ],
+    "duoTeams": [
+      {
+        "id": 1,
+        "name": "test",
+        "members": [
+          "456295370901684227"
+        ]
+      }
+    ],
+    "squadTeams": [],
+    "paidVersion": true,
+    "soloStructure": [],
+    "duoStructure": [],
+    "duoAmount": 2,
+    "squadStructure": [],
+    "squadAmount": 0,
+    "soloRequirePhoto": false,
+    "duoRequirePhoto": false,
+    "squadRequirePhoto": false,
+    "scrimPlacements": [
+      {
+        "placements": []
+      }
+    ],
+    "placementEmbed": "541412888724897795",
+    "trackScores": true,
+    "soloLeaderboard": [
+      {
+        "team": "139279634796773376",
+        "points": 2.6561000000000003
+      }
+    ],
+    "duoLeaderboard": [],
+    "squadLeaderboard": [],
+    "useLinear": true
+  }
+}

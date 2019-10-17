@@ -1,0 +1,278 @@
+const { Command } = require("discord.js-commando");
+const { RichEmbed } = require('discord.js');
+
+// Import stuff we need for JSON.
+const fs = require("fs");
+const path = require("path");
+
+module.exports = class FixGameID extends Command {
+	constructor(client){
+		super(client, {
+			name: "fixgameid",
+			group: "scrims",
+			memberName: "fixgameid",
+			description: "Changes a team's gameID in the embed, in case of a mistake.",
+			examples: ["gameid abcd", "gameid 50a1"],
+            guildOnly: true,
+			args: [
+				{
+					key: "tempgameid",
+					prompt: "What is your correct Game ID?",
+					type: "string",
+					validate: text => {
+						if (text.length == 4) return true;
+						return "Game ID must be 4 characters!"
+					}
+				}
+			]
+		})
+	}
+
+
+
+	async run (msg, args) {
+		const { tempgameid }  = args;
+        var gameid = tempgameid.toLowerCase()
+
+		var fileLocation = path.join(__dirname, "../../servers/", msg.guild.id + ".JSON")
+		if (!fs.existsSync(fileLocation)){
+        fs.writeFileSync( fileLocation, '{"guild": {}}', {encoding: "utf8", flag: "wx" } ) // create the file if it doesn't already exist and write some JSON to it to stop errors.
+
+    }
+		var server = JSON.parse(fs.readFileSync(fileLocation, "utf8")); // read the file.
+var serverInfo = server.guild // get the guild info. We need to be able to save 'server' seperately as that contains ALL the data.
+
+		// First, ensure the server has been configured.
+		if (Object.keys(serverInfo).length == 0){
+			return msg.reply("this server has not been configured. Type -configure first before using this command!")
+		}
+
+		// Determine what we should enter into the embed.
+		var value = null
+		var type = serverInfo.gameidType
+
+		// Determine what value we want to input into the embed, either the team role or their username.
+		if (type == "solo"){
+			value = msg.member.id // Get their @username.
+		}
+		else if (type == "duo"){
+            value = findDuoInfo(serverInfo.duoTeams, msg.member.id)
+            if (value == null){
+                return msg.reply("you are not in a duo team! Type `-createduo <name>` to create one!")
+                    .then(newmsg => {
+                        setTimeout(() => newmsg.delete(), 20000 )
+                    })
+            }
+            else{
+                value = value.id
+            }
+		}
+		else{
+			// See if they are in a voice channel where the channel name is a role name.
+			var VC = msg.member.voiceChannel
+			if (!(VC == undefined) ){
+				var possibleRole = msg.guild.roles.find( function(roleInfo){
+					return roleInfo.name == VC.name
+				})
+				if (possibleRole !== null){
+					if (msg.member.roles.has(possibleRole.id)){
+						value = possibleRole.id
+					}
+				}
+			}
+
+			// Check if we actually have a value
+			if (value == null){
+				value = msg.member.roles.filter(role => !(role.position == 0)) // Get rid of the "@everyone" role which is always at the bottom-most (0) position.
+				if (!value){ // Stops errors
+					return msg.reply("you do not have a team role! Please get one from the admins before trying to add your Game ID!")
+				}
+
+				value = value.sort((a, b) => b.comparePositionTo(a)).last().id // Sorts the collection of roles by it's position in the role heriarchy. Then, takes the bottom-most role.
+			}
+
+			if (value == null){ // Stops errors
+				return msg.reply("you do not have a team role! Please get one from the admins before trying to add your Game ID!")
+			}
+		}
+
+
+		// Check if there are set "GameID" channels:
+		if (serverInfo.permittedChannels.length !== 0){ // there are set channels.
+			if ( !(serverInfo.permittedChannels.includes(msg.channel.id))){
+				msg.reply("you cannot use this command here!")
+					.then(newmsg => {
+						setTimeout(() => newmsg.delete(), 20000 )
+					})
+				return
+			}
+		}
+
+		// Check if there is actually a game going on
+		if (serverInfo.currentScrim.length === 0){
+			msg.reply("there is no scrim currently in progress!") // I don't see when this would ever be called. But whatever.
+				.then(newmsg => {
+					setTimeout(() => newmsg.delete(), 20000 )
+				})
+			return
+		}
+
+		var currentGame = serverInfo.currentScrim[serverInfo.currentScrim.length-1].games
+		var hasChanged = false
+        var oldGameID = null
+		for (var i=0; i < currentGame.length; i++){
+			if (currentGame[i].teams.includes(value)){ // this gameid has their value
+				if (currentGame[i].gameID == gameid){ // they've inputted the same ID.
+					msg.reply("you have already entered that GameID!")
+						.then(newmsg => {
+							setTimeout(() => newmsg.delete(), 20000 )
+						})
+					return
+				}
+				else { // we want to delete this value.
+                    oldGameID = currentGame[i].gameID
+					currentGame[i].teams = currentGame[i].teams.filter( (e) => { return e !== value })
+					if (currentGame[i].teams.length === 0){
+						currentGame.splice(i, 1) // remove the value
+					}
+					hasChanged = true
+				}
+			}
+		}
+
+		if (!hasChanged || serverInfo.gameidEmbed == null ){ // they either haven't inputted a GameID, or a new game has just been started (which hypothetically makes the first statement true)
+			msg.reply("you haven't inputted a gameID yet!")
+				.then(newmsg => {
+					setTimeout(() => newmsg.delete(), 20000 )
+				})
+			return
+		}
+
+
+
+		var scrimData = serverInfo.currentScrim[serverInfo.currentScrim.length-1] // Get the last (most recent) game data.
+		var addedValue = false // check if we need to add a new gameid.
+		for (var i=0; i < scrimData.games.length; i++) {
+
+			if (scrimData.games[i].gameID == gameid){ // the gameID already exists, so let's add the value.
+				scrimData.games[i].teams.push(value) // add the new value.
+				addedValue = true
+				break
+			}
+		}
+
+		if (!addedValue){ // we didn't add a value, so we need to create a new gameid.
+			var newid = {
+				"gameID": gameid,
+				"teams": [value]
+			}
+
+			// Add the new gameid object
+			scrimData.games.push(newid)
+		}
+
+
+
+		// Hypothetically at this point we now have modified any of the data we wanted.
+		// Because we are using JSON and we are going to be "creating" a new messsage each time then
+		// either editing it if it already exists or creating a new message, we can just create
+		// the embed then decide at the end what we want to do with it.
+
+
+		const embed = new RichEmbed()
+			.setAuthor(this.client.user.username, this.client.user.displayAvatarURL) // set the author to ScrimBot, and the photo it uses.
+			.setColor(0x00AE86)
+			.setFooter("Type -gameid <4 digit code> to add your team! Created by @Feldma#1776.")
+			// Omitting timestamp because it'll just keep on changing rapidly. We can possibly put this back in if we want though.
+
+			// Let's start adding our data.
+			var scrimData = serverInfo.currentScrim[serverInfo.currentScrim.length-1]
+
+			for (var i=0; i < scrimData.games.length; i++){
+				var updatedTeams = []
+
+				for (var j=0; j < scrimData.games[i].teams.length; j++){
+					if (type == "squads"){ // get the role
+						updatedTeams.push(msg.guild.roles.get(scrimData.games[i].teams[j]))
+					}
+					else if (type == "duo"){
+                        updatedTeams.push("- " + getDuoInfo(serverInfo.duoTeams, scrimData.games[i].teams[j]).name)
+					}
+					else { // get the username.
+						updatedTeams.push(msg.guild.members.get(scrimData.games[i].teams[j]))
+					}
+
+				}
+                if (type == "solo"){
+                    var sliceIndex = 0
+                    if ((sliceIndex + 10) > (updatedTeams.length)){
+                        embed.addField("Players in GameID **__" + scrimData.games[i].gameID + "__**: (Total: " + updatedTeams.length.toString() + ")", updatedTeams.sort())
+        				sliceIndex += 10
+        			}
+        			else{
+                        embed.addField("Players in GameID **__" + scrimData.games[i].gameID + "__**: (Total: " + updatedTeams.length.toString() + ")", updatedTeams.sort().slice(sliceIndex, 10))
+        				sliceIndex += 10
+        			}
+
+        			while ((sliceIndex + 10) < (updatedTeams.length)){
+        				embed.addField('\u200B', updatedTeams.slice(sliceIndex, sliceIndex + 10))
+        				sliceIndex += 10
+        			}
+
+        			// We should now have some remaining info probably.
+        			if (sliceIndex < updatedTeams.length){
+        				embed.addField('\u200B', updatedTeams.slice(sliceIndex))
+        			}
+				}
+				else{
+					embed.addField("Teams in GameID **__" + scrimData.games[i].gameID + "__**:", updatedTeams.sort())
+				}
+
+			}
+
+
+		// Next, check if we have restarted the collection process and should create a new message.
+
+
+		msg.guild.channels.get(serverInfo.gameidChannel).fetchMessage(serverInfo.gameidEmbed).then(msg => { msg.edit(embed)}) // edit the message. fetchMessage is a promise so we have to put it in .then
+        msg.delete()
+
+		fs.writeFile(fileLocation, JSON.stringify(server, null, 2), (err) => {
+			if (err){
+				console.error(error)
+				return msg.reply("failed to write GameID data - an internal file error occured.\nThis *will* result in data loss!\nPlease contact @Feldma#1776.\nERROR:GAMEID1")
+			}
+            else{
+                const embed = new RichEmbed()
+                    			.setAuthor(this.client.user.username, this.client.user.displayAvatarURL) // set the author to ScrimBot, and the photo it uses.
+                    			.setColor(0xFFFFFF)
+                    			.setFooter("Created by @Feldma#1776")
+                    			.setTitle("GameID information has been updated!")
+                                .addField("Updated Information:", "Previous GameID: **" + oldGameID + "**.\n" +
+                                                                  "New GameID: **" + gameid + "**.\n")
+				return msg.replyEmbed(embed)
+                    .then(newmsg => {
+    					setTimeout(() => newmsg.delete(), 20000 )
+    				})
+            }
+
+		})
+	}
+}
+function findDuoInfo(teamData, id){
+    for (var info=0; info < teamData.length; info++){
+        if (teamData[info].members.includes(id)){
+            return teamData[info]
+        }
+    }
+    // no data found, return null.
+    return null
+}
+function getDuoInfo(teamData, id){
+    for (var info=0; info < teamData.length; info++){
+        if (teamData[info].id == id){
+            return teamData[info]
+        }
+    }
+    return null
+}

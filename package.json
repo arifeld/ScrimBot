@@ -1,0 +1,33 @@
+{
+  "name": "scrimbot",
+  "version": "1.0.0",
+  "description": "Scrimbot Discord Bot",
+  "main": "server.js",
+  "scripts": {
+    "test": "server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arifeld/ScrimBot.git"
+  },
+  "keywords": [
+    "scrimbot",
+    "discord",
+    "feldma"
+  ],
+  "author": "Feldma",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/arifeld/ScrimBot/issues"
+  },
+  "homepage": "https://github.com/arifeld/ScrimBot#readme",
+  "dependencies": {
+    "discord.js": "^11.4.2",
+    "discord.js-commando": "^0.10.0",
+    "ffmpeg-binaries": "^4.0.0",
+    "node-gyp": "^3.8.0",
+    "node-opus": "^0.3.1",
+    "rebuild": "^0.1.2",
+    "sqlite": "^3.0.0"
+  }
+}
